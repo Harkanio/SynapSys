@@ -14,5 +14,7 @@
     "--background-index",
     "--query-driver=C:\\Users\\anton\\.espressif\\tools\\xtensa-esp-elf\\esp-13.2.0_20240530\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc.exe",
     "--compile-commands-dir=c:\\Users\\anton\\OneDrive\\Escritorio\\SynapSys\\SynapSys-Audio\\build"
-  ]
+  ],
+  "idf.portWin": "COM4",
+  "idf.flashType": "UART"
 }

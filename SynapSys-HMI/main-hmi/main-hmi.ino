@@ -43,6 +43,15 @@ const unsigned long SD_CHECK_INTERVAL = 5000; // Revisar cada 5 segundos
 
 bool sdInserted = false; // Estado actual de la SD
 
+// ================== PANTALLA ESTADO ==================
+static lv_obj_t *label_sd_status;
+static lv_obj_t *bar_sd;
+
+  uint64_t totalBytes;
+  uint64_t usedBytes;
+  uint64_t freeBytes;
+
+
 // ================== FUNCIONES AUXILIARES ==================
 extern "C" uint8_t temprature_sens_read(void);
 float getInternalTemp() {
@@ -110,16 +119,67 @@ void create_nodos_screen(lv_obj_t *parent) {
 }
 
 void create_estado_screen(lv_obj_t *parent) {
-    lv_obj_t *lbl = lv_label_create(parent);
-    lv_label_set_text(lbl, "Pantalla ESTADO");
-    lv_obj_center(lbl);
+    lv_obj_clean(parent);
+
+    int screen_height = SCREEN_HEIGHT / 3; // Ocupa 1/3 de la pantalla
+    int section_height = screen_height / 2 - 5; // Cada sección (WiFi/SD) más compacta
+
+    // ================= SECCION WIFI =================
+    lv_obj_t *wifi_cont = lv_obj_create(parent);
+    lv_obj_set_size(wifi_cont, LV_PCT(90), section_height);
+    lv_obj_set_style_bg_color(wifi_cont, lv_color_hex(0xF0F0F0), 0);
+    lv_obj_set_style_radius(wifi_cont, 4, 0);
+    lv_obj_set_style_border_width(wifi_cont, 1, 0);
+    lv_obj_set_style_border_color(wifi_cont, lv_color_hex(0xB0B0B0), 0);
+    lv_obj_set_flex_flow(wifi_cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(wifi_cont, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_align(wifi_cont, LV_ALIGN_TOP_MID, 0, 5);
+
+    lv_obj_t *lbl_wifi_title = lv_label_create(wifi_cont);
+    lv_label_set_text(lbl_wifi_title, "WiFi");
+    lv_obj_set_style_text_font(lbl_wifi_title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(lbl_wifi_title, lv_color_black(), 0);
+
+    lv_obj_t *lbl_wifi_status = lv_label_create(wifi_cont);
+    lv_label_set_text(lbl_wifi_status, "Estado: Conectado");
+    lv_obj_set_style_text_font(lbl_wifi_status, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(lbl_wifi_status, lv_color_black(), 0);
+
+    // ================= SECCION SD =================
+    lv_obj_t *sd_cont = lv_obj_create(parent);
+    lv_obj_set_size(sd_cont, LV_PCT(90), section_height);
+    lv_obj_set_style_bg_color(sd_cont, lv_color_hex(0xF0F0F0), 0);
+    lv_obj_set_style_radius(sd_cont, 4, 0);
+    lv_obj_set_style_border_width(sd_cont, 1, 0);
+    lv_obj_set_style_border_color(sd_cont, lv_color_hex(0xB0B0B0), 0);
+    lv_obj_set_flex_flow(sd_cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(sd_cont, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_align(sd_cont, LV_ALIGN_TOP_MID, 0, section_height + 15);
+
+    lv_obj_t *lbl_sd_title = lv_label_create(sd_cont);
+    lv_label_set_text(lbl_sd_title, "Memoria SD");
+    lv_obj_set_style_text_font(lbl_sd_title, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(lbl_sd_title, lv_color_black(), 0);
+
+    bar_sd = lv_bar_create(sd_cont);
+    lv_bar_set_range(bar_sd, 0, 100);
+    lv_bar_set_value(bar_sd, 0, LV_ANIM_OFF);
+    lv_obj_set_size(bar_sd, LV_PCT(80), 12); // Barra más pequeña
+    lv_obj_set_style_pad_all(bar_sd, 0, 0);
+
+    label_sd_status = lv_label_create(sd_cont);
+    lv_label_set_text(label_sd_status, "DESCONECTADA");
+    lv_obj_set_style_text_font(label_sd_status, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_color(label_sd_status, lv_palette_main(LV_PALETTE_RED), 0);
 }
+
 
 void create_config_screen(lv_obj_t *parent) {
     lv_obj_t *lbl = lv_label_create(parent);
     lv_label_set_text(lbl, "Pantalla CONFIG");
     lv_obj_center(lbl);
 }
+
 
 // ================== CALLBACK DE PESTAÑAS =================
 void tab_event_cb(lv_event_t *e) {
@@ -279,6 +339,7 @@ bool initSD() {
     if (SD.begin(SD_CS, spi_sd, freq)) {
       Serial.println("SD inicializada correctamente");
       sdOk = true;
+      sdInserted = true;
       break;
     }
     Serial.println("Error inicializando la SD");
@@ -300,6 +361,19 @@ bool initSD() {
     case CARD_SDHC: Serial.println("SDHC"); break;
     default:        Serial.println("DESCONOCIDO"); break;
   }
+
+  // Tamaño total de la SD
+  uint64_t cardSize = SD.cardSize() / (1024 * 1024);
+  Serial.printf("💾 Tamaño total: %llu MB\n", cardSize);
+
+  // Espacio disponible
+  totalBytes = SD.totalBytes();
+  usedBytes = SD.usedBytes();
+  freeBytes = totalBytes - usedBytes;
+
+  Serial.printf("📂 Espacio usado: %llu MB\n", usedBytes / (1024 * 1024));
+  Serial.printf("📭 Espacio libre: %llu MB\n", freeBytes / (1024 * 1024));
+
   return true;
 }
 
@@ -307,12 +381,12 @@ void checkSDStatus() {
   if (millis() - lastSDCheck >= SD_CHECK_INTERVAL) {
     lastSDCheck = millis();
 
-    if (SD.begin(SD_CS, spi_sd, 40000000)) { // Intentar inicializar a frecuencia segura
+    if (SD.begin(SD_CS, spi_sd, 40000000)) {
       if (!sdInserted) {
         Serial.println("SD detectada e inicializada correctamente");
         sdInserted = true;
       }
-      SD.end(); // Cierra la SD para no bloquear
+      SD.end();
     } else {
       if (sdInserted) {
         Serial.println("SD retirada o no detectada");
@@ -321,6 +395,41 @@ void checkSDStatus() {
     }
   }
 }
+
+void updateSDDisplay() {
+    if (!label_sd_status || !bar_sd) return; // Salir si no existe
+    static lv_obj_t *bar_label = nullptr;
+    char buf[30];
+
+    if (!bar_label) {
+        bar_label = lv_label_create(bar_sd);
+        lv_obj_center(bar_label);
+    }
+
+    if (sdInserted) {
+        lv_label_set_text(label_sd_status, "CONECTADA");
+        lv_obj_set_style_text_color(label_sd_status, lv_palette_main(LV_PALETTE_GREEN), 0);
+
+        int usedPercent = (usedBytes * 100) / totalBytes;
+        lv_bar_set_value(bar_sd, usedPercent, LV_ANIM_OFF);
+        
+
+        sprintf(buf, "%llu / %llu MB", usedBytes / (1024 * 1024), totalBytes / (1024 * 1024));
+        
+        lv_label_set_text(bar_label, buf);
+        lv_obj_set_style_text_color(bar_label, lv_color_hex(0x202020), 0); //
+    } else {
+        lv_label_set_text(label_sd_status, "DESCONECTADA");
+        lv_obj_set_style_text_color(label_sd_status, lv_palette_main(LV_PALETTE_RED), 0);
+        lv_bar_set_value(bar_sd, 0, LV_ANIM_OFF);
+
+        sprintf(buf, "? / ? MB");
+        lv_label_set_text(bar_label, buf);              // <--- actualiza el texto de la barra
+        lv_obj_set_style_text_color(bar_label, lv_color_hex(0x202020), 0); // color gris
+    }
+}
+
+
 
 
 // ================== SETUP ==================
@@ -357,6 +466,7 @@ void loop() {
   delay(5);
   checkSerialUpdate();
   checkSDStatus(); // <-- Revisión periódica de la SD
+  updateSDDisplay();
 
   // Actualización de datos de barra superior
   float temp = getInternalTemp();
